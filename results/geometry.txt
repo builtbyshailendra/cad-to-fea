@@ -1,0 +1,21 @@
+beam: volume 80000.000000 mm3, area 16800.000000 mm2, centre of mass (100.000000, 0.000000, -0.000000) mm, 6 faces, 12 edges
+  closed form: volume 80000.000000, area 16800.000000
+  largest relative difference, CadQuery vs build123d (own APIs): 2.2e-16
+  largest relative difference, the two STEP files read back:     2.2e-16
+  largest relative difference, CadQuery vs closed form:           2.2e-16
+  largest relative difference, build123d vs closed form:          1.8e-16
+  build time: CadQuery 23 ms, build123d 5 ms; STEP 15512 and 15435 bytes
+stocky: volume 32000.000000 mm3, area 7200.000000 mm2, centre of mass (40.000000, 0.000000, 0.000000) mm, 6 faces, 12 edges
+  closed form: volume 32000.000000, area 7200.000000
+  largest relative difference, CadQuery vs build123d (own APIs): 8.9e-19
+  largest relative difference, the two STEP files read back:     8.9e-19
+  largest relative difference, CadQuery vs closed form:           2.3e-16
+  largest relative difference, build123d vs closed form:          2.3e-16
+  build time: CadQuery 9 ms, build123d 5 ms; STEP 15499 and 15422 bytes
+bracket: volume 67520.708114 mm3, area 20998.690230 mm2, centre of mass (60.760834, 0.000000, 11.417728) mm, 10 faces, 24 edges
+  closed form: volume 67520.708114, area 20998.690230
+  largest relative difference, CadQuery vs build123d (own APIs): 3.5e-16
+  largest relative difference, the two STEP files read back:     6.1e-16
+  largest relative difference, CadQuery vs closed form:           5.8e-16
+  largest relative difference, build123d vs closed form:          2.3e-16
+  build time: CadQuery 74 ms, build123d 55 ms; STEP 30292 and 30349 bytes

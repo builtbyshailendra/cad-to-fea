@@ -1,0 +1,20 @@
+[project]
+name = "cadfea"
+version = "0.1.0"
+description = "One bracket modelled in CadQuery and build123d, meshed with Gmsh, solved with CalculiX and FEniCSx, checked against beam theory and Kt"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy",
+  "cadquery==2.8.0",
+  "build123d==0.12.0",
+  "gmsh==4.15.2",
+]
+
+[project.optional-dependencies]
+test = ["pytest==9.2.0", "matplotlib"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q -rs"
+filterwarnings = ["ignore::DeprecationWarning"]
