@@ -1,11 +1,12 @@
-case     level    size  feat    nodes     tets      dofs  vol err   vol err  min    mesh
-                  (mm)  (mm)                                straight  curved   SICN   (s)
-beam     coarse   10.0  10.0     1010      442      3030   0.0e+00   3.4e-12  0.336   0.09
-beam     medium    5.0   5.0     6579     3554     19737   0.0e+00   3.4e-12  0.307   0.20
-beam     fine      2.5   2.5    39702    25080    119106   0.0e+00   3.4e-12  0.260   1.09
-stocky   coarse   10.0  10.0      506      226      1518   1.1e-16   3.4e-12  0.336   0.05
-stocky   medium    5.0   5.0     2753     1458      8259   0.0e+00   3.4e-12  0.299   0.09
-stocky   fine      2.5   2.5    16057     9966     48171   0.0e+00   3.4e-12  0.302   0.39
-bracket  coarse    8.0   2.0     6308     3339     18924   3.8e-04   4.7e-07  0.190   0.32
-bracket  medium    5.0   1.0    27251    16540     81753   1.0e-04   3.2e-08  0.231   0.86
-bracket  fine      3.5   0.6    92623    60588    277869   3.8e-05   4.3e-09  0.235   4.10
+case     level    size  hole fillet    nodes     tets      dofs  vol err   vol err  min    mesh
+                  (mm)  (mm)   (mm)                                straight  curved   SICN   (s)
+beam     coarse   10.0     -      -     1010      442      3030   0.0e+00   3.4e-12  0.336   0.04
+beam     medium    5.0     -      -     6579     3554     19737   0.0e+00   3.4e-12  0.307   0.11
+beam     fine      2.5     -      -    39626    25004    118878   0.0e+00   3.4e-12  0.300   0.50
+stocky   coarse   10.0     -      -      506      226      1518   1.1e-16   3.4e-12  0.336   0.02
+stocky   medium    5.0     -      -     2753     1458      8259   0.0e+00   3.4e-12  0.299   0.04
+stocky   fine      2.5     -      -    16072     9979     48216   2.2e-16   3.4e-12  0.302   0.19
+bracket  coarse    8.0   2.0    2.0     6317     3349     18951   3.9e-04   4.8e-07  0.173   0.21
+bracket  medium    5.0   1.0    1.0    26966    16319     80898   1.0e-04   3.2e-08  0.263   0.52
+bracket  fine      3.5   0.6    0.6    92883    60777    278649   3.8e-05   4.3e-09  0.288   1.63
+thin     fine      3.0   0.4    1.0    50193    28493    150579   2.2e-04   5.5e-08  0.275   0.83
