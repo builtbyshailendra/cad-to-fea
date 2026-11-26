@@ -1,0 +1,7 @@
+# The CAD and meshing job (and local runs). The FEniCSx job uses the DOLFINx image instead.
+cadquery==2.8.0
+build123d==0.12.0
+gmsh==4.15.2
+numpy==2.5.5
+matplotlib==3.11.2
+pytest==9.2.0
