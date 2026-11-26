@@ -57,13 +57,15 @@ def _linear_mesh(mesh_inp: Path, out: Path) -> set[int]:
 
 def write_deck(info: dict, mesh_dir: Path, job_dir: Path, element: str = "C3D10",
                mat: Material = STEEL) -> Path:
-    """Write <job>.inp next to a copy of the mesh, return its path."""
+    """Write <job>.inp next to a copy of the mesh; return its path and the
+    number of nodes the elements use (all of them for C3D10, corners for C3D4)."""
     case, level = info["case"], info["level"]
-    job = f"{case}_{level}" + ("" if element == "C3D10" else f"_{element.lower()}")
+    job = f"{case}_{level}" + ("" if element == "C3D10" else f"_{element.lower()}") + material_tag(mat)
     job_dir.mkdir(parents=True, exist_ok=True)
     src = mesh_dir / f"{case}_{level}_mesh.inp"
     mesh_file = job_dir / f"{job}_mesh.inp"
     nsets = info["nsets"]
+    n_active = info["n_nodes"]
     if element == "C3D10":
         shutil.copyfile(src, mesh_file)
     elif element == "C3D4":
@@ -71,6 +73,7 @@ def write_deck(info: dict, mesh_dir: Path, job_dir: Path, element: str = "C3D10"
         # them out of the sets, or CalculiX would constrain or load free nodes.
         corners = _linear_mesh(src, mesh_file)
         nsets = {k: [n for n in v if n in corners] for k, v in nsets.items()}
+        n_active = len(corners)
     else:
         raise ValueError(f"element must be one of {ELEMENT_TYPES}")
 
@@ -118,7 +121,7 @@ def write_deck(info: dict, mesh_dir: Path, job_dir: Path, element: str = "C3D10"
         ]
     deck = job_dir / f"{job}.inp"
     deck.write_text("\n".join(parts) + "\n")
-    return deck
+    return deck, n_active
 
 
 def _linear_loads(info: dict, lc: str) -> dict[int, list[float]]:
@@ -237,7 +240,15 @@ def summarise(job_dir: Path, job: str, info: dict, seconds: float, element: str)
     return out
 
 
-def solve(info: dict, mesh_dir: Path, job_root: Path, element: str = "C3D10") -> dict:
-    deck = write_deck(info, mesh_dir, job_root, element)
+def material_tag(mat: Material) -> str:
+    """'' for the default steel, '_nu0' etc. for the Poisson's ratio experiments."""
+    return "" if mat == STEEL else f"_nu{mat.nu:g}".replace(".", "")
+
+
+def solve(info: dict, mesh_dir: Path, job_root: Path, element: str = "C3D10",
+          mat: Material = STEEL) -> dict:
+    deck, n_active = write_deck(info, mesh_dir, job_root, element, mat)
     seconds = run(deck)
-    return summarise(job_root, deck.stem, info, seconds, element)
+    res = summarise(job_root, deck.stem, info, seconds, element)
+    res["n_dofs"] = 3 * n_active
+    return res

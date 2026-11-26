@@ -69,21 +69,28 @@ class Bracket:
 
 
 STEEL = Material()
+# Same steel with Poisson's ratio set to zero: an experiment, not a material.
+# With nu = 0 the clamped root cannot restrain any sideways contraction.
+NU0 = Material(name="NU0", nu=0.0)
 
 # Two plain cantilevers: slender (L/h = 10), where Euler-Bernoulli and
 # Timoshenko differ by 0.8%, and stocky (L/h = 4), where they differ by 4.8%.
 BEAM = Beam()
 STOCKY = Beam(name="stocky", L=80.0)
 BRACKET = Bracket()
+# The same bracket in 2 mm plate (t/d = 0.2 instead of 0.8): close to the
+# plane-stress conditions Heywood's Kt assumes. Used for the Kt check only.
+THIN = Bracket(name="thin", t=2.0)
 
-CASES: dict[str, Beam | Bracket] = {c.name: c for c in (BEAM, STOCKY, BRACKET)}
+CASES: dict[str, Beam | Bracket] = {c.name: c for c in (BEAM, STOCKY, BRACKET, THIN)}
 
 
 @dataclass(frozen=True)
 class MeshLevel:
     name: str
     size: float  # target element size away from features, mm
-    feature: float  # target size on the hole and fillet surfaces (bracket only), mm
+    feature: float  # target size on the hole surface (bracket only), mm
+    fillet: float | None = None  # target size on the fillet surface; None: same as the hole
 
 
 # Three levels per case for the convergence study. Element sizes in mm.
@@ -103,8 +110,15 @@ MESH_LEVELS: dict[str, dict[str, MeshLevel]] = {
         "medium": MeshLevel("medium", 5.0, 1.0),
         "fine": MeshLevel("fine", 3.5, 0.6),
     },
+    "thin": {
+        "fine": MeshLevel("fine", 3.0, 0.4, fillet=1.0),
+    },
 }
 LEVELS = ("coarse", "medium", "fine")
+
+
+def levels(case: str) -> list[str]:
+    return list(MESH_LEVELS[case])
 
 
 def as_dict(obj) -> dict:

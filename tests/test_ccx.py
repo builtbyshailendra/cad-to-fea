@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from cadfea import ccx, mesh, paths, pipeline, theory
-from cadfea.params import BEAM, BRACKET, CASES, LEVELS, STOCKY
+from cadfea.params import BEAM, BRACKET, CASES, LEVELS, NU0, STOCKY, THIN, levels
 
 FRD_SAMPLE = """\
     1C
@@ -66,7 +66,8 @@ def test_dat_parser(tmp_path):
 @pytest.mark.needs("cadquery", "gmsh")
 def test_deck_has_everything(tmp_path):
     info = pipeline.ensure_mesh("bracket", "coarse")
-    deck = ccx.write_deck(info, paths.MESH_DIR, tmp_path)
+    deck, n_active = ccx.write_deck(info, paths.MESH_DIR, tmp_path)
+    assert n_active == info["n_nodes"]
     text = deck.read_text()
     for card in ("*INCLUDE, INPUT=bracket_coarse_mesh.inp", "*NSET, NSET=NFIXED", "*NSET, NSET=NTIP",
                  "*ELASTIC", "*SOLID SECTION, ELSET=SOLID", "NFIXED, 1, 3, 0.0", "*CLOAD, OP=NEW"):
@@ -85,9 +86,10 @@ def test_deck_has_everything(tmp_path):
 @pytest.mark.needs("cadquery", "gmsh")
 def test_c3d4_deck_uses_corner_nodes_only(tmp_path):
     info = pipeline.ensure_mesh("beam", "coarse")
-    deck = ccx.write_deck(info, paths.MESH_DIR, tmp_path, element="C3D4")
+    deck, n_active = ccx.write_deck(info, paths.MESH_DIR, tmp_path, element="C3D4")
     xyz, elems = mesh.read_inp(tmp_path / "beam_coarse_c3d4_mesh.inp")
     corners = set(elems["C3D4"][:, 1:].ravel())
+    assert n_active == len(corners) < info["n_nodes"] / 3  # 10-node tets: most nodes are mid-edge
     assert elems["C3D4"].shape == (info["n_tets"], 5)
     text = deck.read_text()
     loaded = {int(line.split(",")[0]) for line in text.split("*CLOAD")[1].split("*NODE PRINT")[0].splitlines()[1:]}
@@ -102,28 +104,51 @@ pytestmark_solve = pytest.mark.needs("ccx", "cadquery", "gmsh")
 @pytestmark_solve
 @pytest.mark.parametrize("case", list(CASES))
 def test_reactions_balance_the_load(case):
-    for level in LEVELS:
+    for level in levels(case):
         r = pipeline.ensure_ccx(case, level)
         for lc, total in mesh.load_vectors(CASES[case]).items():
             np.testing.assert_allclose(r["load_cases"][lc]["reaction"], -np.array(total),
                                        rtol=1e-6, atol=1e-6 * np.abs(total).max())
 
 
+# Tolerances against Timoshenko, and why they differ (see README, step 5):
+# the fully clamped root face also stops the steel contracting sideways
+# (Poisson's ratio), which beam theory's clamp does not. That makes the 3D
+# beam stiffer by about 0.7% at L/h = 10 and 1.7% at L/h = 4 (measured). Run
+# with nu = 0 and the gap closes to under 0.1%, so the solver and the mesh are
+# fine; the difference is the boundary condition.
+TIMOSHENKO_TOL = {"beam": 0.01, "stocky": 0.02}
+
+
 @pytestmark_solve
 @pytest.mark.parametrize("p", [BEAM, STOCKY], ids=["beam", "stocky"])
 def test_cantilever_matches_timoshenko(p):
-    """Finest mesh within 1% of Timoshenko (Cowper k); measured 0.0-0.5%."""
     exact = theory.timoshenko_tip(p)
     d = -pipeline.ensure_ccx(p.name, "fine")["load_cases"]["tip"]["tip_u"][2]
-    assert abs(d / exact - 1) < 0.01, (d, exact)
+    assert abs(d / exact - 1) < TIMOSHENKO_TOL[p.name], (d, exact)
+    assert d < exact  # the clamp makes it stiffer, never softer
+
+
+@pytestmark_solve
+@pytest.mark.parametrize("p", [BEAM, STOCKY], ids=["beam", "stocky"])
+def test_poisson_zero_closes_the_gap(p):
+    """With nu = 0 the 3D cantilever matches Timoshenko to 0.1% (measured 0.004% and 0.06%)."""
+    exact = theory.timoshenko_tip(p, NU0)
+    d = -pipeline.ensure_ccx(p.name, "fine", "C3D10", NU0)["load_cases"]["tip"]["tip_u"][2]
+    assert abs(d / exact - 1) < 0.001, (d, exact)
 
 
 @pytestmark_solve
 def test_stocky_beam_needs_shear_deformation():
-    """At L/h = 4 Euler-Bernoulli misses by 4.6%; the solver sides with Timoshenko."""
+    """At L/h = 4 Euler-Bernoulli misses by 3.7-4.8%; the 3D answer sides with Timoshenko."""
+    d0 = -pipeline.ensure_ccx("stocky", "fine", "C3D10", NU0)["load_cases"]["tip"]["tip_u"][2]
+    eb0, ts0 = theory.euler_bernoulli_tip(STOCKY, NU0), theory.timoshenko_tip(STOCKY, NU0)
+    assert abs(d0 - ts0) < 0.05 * abs(d0 - eb0)
+    # With nu = 0.3 the clamp takes some of it back, but most of the shear
+    # deflection is still there (measured 63%).
     d = -pipeline.ensure_ccx("stocky", "fine")["load_cases"]["tip"]["tip_u"][2]
     eb, ts = theory.euler_bernoulli_tip(STOCKY), theory.timoshenko_tip(STOCKY)
-    assert abs(d - ts) < 0.25 * abs(d - eb)
+    assert d - eb > 0.5 * (ts - eb)
 
 
 @pytestmark_solve
@@ -138,11 +163,35 @@ def test_c3d10_converges_and_c3d4_locks(case):
     assert lin[0] < lin[1] < lin[2]  # ...creeping up as the mesh is refined
 
 
+def kt_of(r: dict, p) -> dict:
+    """Hole Kt numbers from one solver result (pull load)."""
+    pu, s = r["load_cases"]["pull"], theory.net_stress(p)
+    prof = [v for _, v in pu["hole_sxx_profile"]]
+    return {"peak": pu["hole_sxx_max"] / s, "face": pu["hole_sxx_face_max"] / s, "mean": sum(prof) / len(prof) / s}
+
+
+def check_kt(results: dict) -> None:
+    """Shared by the CalculiX and FEniCSx tests. results: {(case, level): result}.
+
+    Heywood's Kt is a plane-stress (2D) number. In a plate of real thickness the
+    hoop stress at the hole peaks at mid-thickness and drops where the hole
+    meets the faces. So the tight check is the thin plate (t/d = 0.2, measured
+    +1.7%); the 8 mm bracket (t/d = 0.8) must show the 3D effect: peak above
+    Heywood (measured +5.4%), faces below (-8%), thickness average close (+3%).
+    """
+    ref = theory.heywood_kt(BRACKET)
+    thin = kt_of(results[("thin", "fine")], THIN)
+    thick = kt_of(results[("bracket", "fine")], BRACKET)
+    thick_medium = kt_of(results[("bracket", "medium")], BRACKET)
+    assert abs(thin["peak"] / ref - 1) < 0.025, thin
+    assert abs(thin["mean"] / ref - 1) < 0.015, thin
+    assert thick["face"] < ref < thick["mean"] < thick["peak"], thick
+    assert thick["peak"] > thin["peak"] and thick["face"] < thin["face"]
+    assert abs(thick["mean"] / ref - 1) < 0.04, thick
+    assert abs(thick["peak"] / ref - 1) < 0.07, thick
+    assert abs(thick["peak"] / thick_medium["peak"] - 1) < 0.01  # converged: medium vs fine
+
+
 @pytestmark_solve
-def test_bracket_hole_kt():
-    """Pull load: hoop stress at the hole over the net-section stress vs Heywood."""
-    r = pipeline.ensure_ccx("bracket", "fine")["load_cases"]["pull"]
-    kt = r["hole_sxx_max"] / theory.net_stress(BRACKET)
-    assert abs(kt / theory.heywood_kt(BRACKET) - 1) < 0.05, kt
-    # 3D effect: the peak is at mid-thickness, lower where the hole meets the faces.
-    assert r["hole_sxx_mid_max"] > r["hole_sxx_face_max"]
+def test_hole_kt_against_heywood():
+    check_kt({(c, lv): pipeline.ensure_ccx(c, lv) for c, lv in [("thin", "fine"), ("bracket", "fine"), ("bracket", "medium")]})

@@ -62,22 +62,32 @@ def classify_faces(gmsh, p: Beam | Bracket) -> dict[str, list[int]]:
 
 
 def _size_field(gmsh, groups: dict[str, list[int]], level: MeshLevel, p: Beam | Bracket) -> None:
-    """Small elements on the hole and fillet, growing to the global size further away."""
+    """Small elements on the hole and fillet, growing to the global size further away.
+
+    One Distance -> Threshold pair per feature, combined with a Min field: the
+    element size anywhere is the smallest any feature asks for.
+    """
     if not isinstance(p, Bracket):
         return
     f = gmsh.model.mesh.field
-    dist = f.add("Distance")
-    f.setNumbers(dist, "SurfacesList", groups["HOLE"] + groups["FILLET"])
-    f.setNumber(dist, "Sampling", 60)
-    thr = f.add("Threshold")
-    f.setNumber(thr, "InField", dist)
-    f.setNumber(thr, "SizeMin", level.feature)
-    f.setNumber(thr, "SizeMax", level.size)
-    # Full refinement within 1.5 mm of the surface, then a linear ramp to the
-    # global size 10 mm away (about one hole diameter).
-    f.setNumber(thr, "DistMin", 1.5)
-    f.setNumber(thr, "DistMax", 10.0)
-    f.setAsBackgroundMesh(thr)
+    fillet = level.feature if level.fillet is None else level.fillet
+    thresholds = []
+    for faces, size in ((groups["HOLE"], level.feature), (groups["FILLET"], fillet)):
+        dist = f.add("Distance")
+        f.setNumbers(dist, "SurfacesList", faces)
+        f.setNumber(dist, "Sampling", 60)
+        thr = f.add("Threshold")
+        f.setNumber(thr, "InField", dist)
+        f.setNumber(thr, "SizeMin", size)
+        f.setNumber(thr, "SizeMax", level.size)
+        # Full refinement within 1.5 mm of the surface, then a linear ramp to
+        # the global size 10 mm away (about one hole diameter).
+        f.setNumber(thr, "DistMin", 1.5)
+        f.setNumber(thr, "DistMax", 10.0)
+        thresholds.append(thr)
+    both = f.add("Min")
+    f.setNumbers(both, "FieldsList", thresholds)
+    f.setAsBackgroundMesh(both)
 
 
 def _nodes_of_group(gmsh, dim: int, tag: int) -> list[int]:

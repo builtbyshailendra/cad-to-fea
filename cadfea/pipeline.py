@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 from . import paths
-from .params import CASES, MESH_LEVELS, STEEL, as_dict
+from .params import CASES, MESH_LEVELS, STEEL, Material, as_dict
 
 
 def fingerprint(*parts) -> str:
@@ -79,30 +79,35 @@ def mesh_id(case: str, level: str) -> str:
 
 # ---------------------------------------------------------------- solvers
 
-def _result_path(solver: str, case: str, level: str, element: str) -> Path:
+def _mat_tag(mat: Material) -> str:
+    return "" if mat == STEEL else f"_nu{mat.nu:g}".replace(".", "")
+
+
+def _result_path(solver: str, case: str, level: str, element: str, mat: Material = STEEL) -> Path:
     default = {"calculix": "C3D10", "fenicsx": "P2"}[solver]
     tag = "" if element == default else f"_{element.lower()}"
     short = {"calculix": "ccx", "fenicsx": "fenicsx"}[solver]
-    return paths.RESULTS_DIR / f"{short}_{case}_{level}{tag}.json"
+    return paths.RESULTS_DIR / f"{short}_{case}_{level}{tag}{_mat_tag(mat)}.json"
 
 
-def load_result(solver: str, case: str, level: str, element: str | None = None) -> dict | None:
+def load_result(solver: str, case: str, level: str, element: str | None = None,
+                mat: Material = STEEL) -> dict | None:
     element = element or {"calculix": "C3D10", "fenicsx": "P2"}[solver]
-    return _read(_result_path(solver, case, level, element))
+    return _read(_result_path(solver, case, level, element, mat))
 
 
-def ensure_ccx(case: str, level: str, element: str = "C3D10") -> dict:
+def ensure_ccx(case: str, level: str, element: str = "C3D10", mat: Material = STEEL) -> dict:
     from . import ccx
 
     info = ensure_mesh(case, level)
     mid = mesh_id(case, level)
-    path = _result_path("calculix", case, level, element)
+    path = _result_path("calculix", case, level, element, mat)
     have = _read(path)
-    if have and have.get("mesh_id") == mid and have.get("material") == as_dict(STEEL):
+    if have and have.get("mesh_id") == mid and have.get("material") == as_dict(mat):
         return have
-    res = ccx.solve(info, paths.MESH_DIR, paths.CCX_DIR, element)
-    res.update(mesh_id=mid, material=as_dict(STEEL), size=info["size"],
-               feature_size=info["feature_size"], n_dofs=info["n_dofs"])
+    res = ccx.solve(info, paths.MESH_DIR, paths.CCX_DIR, element, mat)
+    res.update(mesh_id=mid, material=as_dict(mat), size=info["size"],
+               feature_size=info["feature_size"])
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(res, indent=1))
     return res

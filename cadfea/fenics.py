@@ -20,13 +20,26 @@ from .params import CASES, STEEL, Material
 
 
 def _read_mesh(path: Path):
+    """Load the .msh into Gmsh, then hand Gmsh's model to DOLFINx.
+
+    model_to_mesh turns the highest-dimension physical group into the mesh
+    (with the 10-node tets' curved geometry) and the next one down into facet
+    tags: the FIXED and LOAD faces keep their Gmsh tags (11, 12).
+    """
+    import gmsh
     from mpi4py import MPI
 
     try:  # DOLFINx >= 0.10
         from dolfinx.io import gmsh as gmshio
     except ImportError:  # 0.9 and older
         from dolfinx.io import gmshio
-    data = gmshio.read_from_msh(str(path), MPI.COMM_WORLD, 0, gdim=3)
+    gmsh.initialize()
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        gmsh.merge(str(path))
+        data = gmshio.model_to_mesh(gmsh.model, MPI.COMM_WORLD, 0, gdim=3)
+    finally:
+        gmsh.finalize()
     if hasattr(data, "mesh"):
         return data.mesh, data.facet_tags
     return data[0], data[2]
@@ -94,7 +107,7 @@ def solve(msh_path: Path, info: dict, degree: int = 2, mat: Material = STEEL,
         t1 = time.perf_counter()
         uh = problem.solve()
         t_solve += time.perf_counter() - t1
-        tip_u = uh.eval(tip, np.array([tip_cell], dtype=np.int32))[0]
+        tip_u = np.asarray(uh.eval(tip, np.array([tip_cell], dtype=np.int32))).reshape(-1)[:3]
         # Consistent reaction: the residual a(u_h, v) - L(v) on the fixed dofs.
         r = assemble_vector(fem.form(ufl.inner(sigma(uh), eps(v)) * ufl.dx - L))
         r.assemble()
@@ -104,6 +117,7 @@ def solve(msh_path: Path, info: dict, degree: int = 2, mat: Material = STEEL,
             "tip_u": tip_u.tolist(),
             "reaction": reaction.tolist(),
             "max_abs_u": float(np.abs(uh.x.array).max()),
+            "ksp_iterations": int(problem.solver.getIterationNumber()),
             "max_von_mises": float(post.von_mises(nodal["stress"]).max()),
             **post.feature_stresses(info, nodal),
         }

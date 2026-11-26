@@ -7,18 +7,19 @@ import argparse
 
 import _common  # noqa: F401
 from cadfea import pipeline
-from cadfea.params import CASES, LEVELS
+from cadfea.params import CASES, LEVELS, levels
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cases", default=",".join(CASES))
-    ap.add_argument("--levels", default=",".join(LEVELS))
+    ap.add_argument("--levels", default="", help="default: every level of each case")
     ap.add_argument("--degree", type=int, default=2, choices=[1, 2])
     ap.add_argument("--with-p1", action="store_true", help="also run the beams with P1")
     ap.add_argument("--solver", default="lu", choices=["lu", "cg"])
     args = ap.parse_args()
-    runs = [(c, lv, args.degree) for c in args.cases.split(",") for lv in args.levels.split(",")]
+    runs = [(c, lv, args.degree) for c in args.cases.split(",")
+            for lv in (args.levels.split(",") if args.levels else levels(c))]
     if args.with_p1:
         runs += [(c, lv, 1) for c in ("beam", "stocky") for lv in LEVELS]
     print(f"{'case':8s} {'level':7s} {'space':5s} {'dofs':>8s} {'seconds':>8s}  tip displacement per load case (mm)")

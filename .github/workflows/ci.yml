@@ -38,7 +38,7 @@ jobs:
       - name: step 2, Gmsh meshes
         run: python scripts/build_meshes.py
       - name: step 3, CalculiX
-        run: python scripts/run_ccx.py --with-c3d4
+        run: python scripts/run_ccx.py --with-c3d4 --with-nu0
       - name: tests
         run: python -m pytest --junitxml=out/junit-cad.xml
       - uses: actions/upload-artifact@v4
@@ -50,6 +50,8 @@ jobs:
             out/mesh/*.json
             out/results/
             out/junit-cad.xml
+            results/geometry.txt
+            results/meshes.txt
           retention-days: 5
 
   fenicsx:
@@ -71,7 +73,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: cad-mesh-ccx
-          path: out
+          path: .
       - name: versions
         run: |
           python3 -c "import dolfinx, gmsh, numpy, sys; print('python', sys.version.split()[0], 'dolfinx', dolfinx.__version__, 'gmsh', gmsh.__version__, 'numpy', numpy.__version__)"

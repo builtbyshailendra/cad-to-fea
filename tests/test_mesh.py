@@ -3,17 +3,17 @@ import numpy as np
 import pytest
 
 from cadfea import mesh, paths, pipeline, props
-from cadfea.params import CASES, LEVELS, BRACKET
+from cadfea.params import BRACKET, CASES, levels
 
 pytestmark = pytest.mark.needs("cadquery", "gmsh")
 
-ALL = [(c, lv) for c in CASES for lv in LEVELS]
+ALL = [(c, lv) for c in CASES for lv in levels(c)]
 
 
 @pytest.mark.parametrize("case,level", ALL)
 def test_named_faces_and_counts(case, level):
     info = pipeline.ensure_mesh(case, level)
-    expected = {"FIXED", "LOAD", "HOLE", "FILLET"} if case == "bracket" else {"FIXED", "LOAD"}
+    expected = {"FIXED", "LOAD", "HOLE", "FILLET"} if case in ("bracket", "thin") else {"FIXED", "LOAD"}
     assert set(info["nsets"]) == expected
     assert info["n_dofs"] == 3 * info["n_nodes"]
     assert info["min_jacobian_det"] > 0  # no inverted curved element
@@ -26,7 +26,7 @@ def test_mesh_volume_matches_cad(case, level):
     info = pipeline.ensure_mesh(case, level)
     exact = props.analytic(CASES[case])["volume"]
     assert abs(info["volume_curved"] / exact - 1) < 1e-6
-    if case == "bracket":
+    if case in ("bracket", "thin"):
         # Straight-sided tets cut the hole's and fillet's arcs short: 4e-5 to 4e-4.
         assert abs(info["volume_straight"] / exact - 1) > 1e-5
 

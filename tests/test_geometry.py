@@ -67,7 +67,7 @@ def test_check_has_teeth():
     a = geom_cq.properties(geom_cq.build(BRACKET))
     b = geom_b123d.properties(geom_b123d.build(dataclasses.replace(BRACKET, r=BRACKET.r + 0.001)))
     diff = props.rel_diff(a, b)
-    assert diff["volume"] > 1e-7  # about 1.5e-7: 1e5 times the tolerance
+    assert diff["volume"] > 1e-6  # 1.5e-6 measured: a million times the tolerance
     assert max(diff.values()) > TOL
 
 
